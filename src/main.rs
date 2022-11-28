@@ -2,9 +2,7 @@ use std::{path::PathBuf, time::Duration};
 
 #[derive(Debug)]
 enum Event {
-    /// A new screenshot was discovered at a path.
     NewScreenshot(PathBuf),
-    /// The application should exit.
     Exit,
 }
 
