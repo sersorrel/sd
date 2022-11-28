@@ -1,9 +1,10 @@
 //! # sd: screenshot daemon
 
 use std::{
-    path::PathBuf,
+    path::{PathBuf, Path},
     sync::{atomic::AtomicBool, mpsc, Arc},
     thread,
+    time::Duration,
 };
 
 use eyre::WrapErr;
@@ -39,8 +40,21 @@ fn configure_signals(tx: mpsc::Sender<Event>) -> eyre::Result<()> {
     Ok(())
 }
 
-fn spawn_screenshot_watcher(tx: mpsc::Sender<Event>) -> eyre::Result<()> {
-    tx.send(Event::NewScreenshot(todo!()))?;
+fn spawn_screenshot_watcher(tx: mpsc::Sender<Event>) -> eyre::Result<notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>> {
+    let debouncer =
+        notify_debouncer_mini::new_debouncer(Duration::from_millis(500), None, move |r| match r {
+            Ok(events) => {
+                for event in events {
+                    tx.send(Event::NewScreenshot(event.path)).unwrap();
+                }
+            }
+            Err(errors) => {
+                for error in errors {
+                    eprintln!("watch error: {}", error);
+                }
+            }
+        })?;
+    Ok(debouncer)
 }
 
 fn main() -> eyre::Result<()> {
@@ -48,7 +62,8 @@ fn main() -> eyre::Result<()> {
 
     configure_signals(tx.clone())?;
 
-    spawn_screenshot_watcher(tx.clone())?;
+    let mut debouncer = spawn_screenshot_watcher(tx.clone())?;
+    debouncer.watcher().watch(Path::new("/home/ash/Pictures/Screenshots/"), notify::RecursiveMode::NonRecursive)?;
 
     for event in rx.into_iter() {
         dbg!(&event);
